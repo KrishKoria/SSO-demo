@@ -86,12 +86,21 @@ function handleAuth(req, res, action) {
   writeTokens(tokens);
 
   res.cookie("token", token, { httpOnly: true }).send(`
-    <script>
-      fetch('http://localhost:${otherPort}/sso-login?token=${token}', {
-        credentials: 'include'
-      }).then(() => location.href = '/');
-    </script>
-  `);
+      <script>
+        fetch('http://localhost:${otherPort}/sso-login?token=${token}', {
+          credentials: 'include'
+        })
+        .then(() => {
+          console.log('SSO login successful');
+          window.location.href = '/';
+        })
+        .catch(error => {
+          console.error('SSO login error:', error);
+          // Redirect anyway, even if the other server login fails
+          window.location.href = '/';
+        });
+      </script>
+    `);
 }
 
 app.get("/check-auth", (req, res) => {
@@ -125,12 +134,21 @@ app.get("/logout", (req, res) => {
     res.clearCookie("token");
   }
   res.send(`
-    <script>
-      fetch('http://localhost:${otherPort}/sso-logout', {
-        credentials: 'include'
-      }).then(() => location.href = '/');
-    </script>
-  `);
+      <script>
+        fetch('http://localhost:${otherPort}/sso-logout', {
+          credentials: 'include'
+        })
+        .then(() => {
+          console.log('SSO logout successful');
+          window.location.href = '/';
+        })
+        .catch(error => {
+          console.error('SSO logout error:', error);
+          // Redirect anyway, even if the other server logout fails
+          window.location.href = '/';
+        });
+      </script>
+    `);
 });
 
 app.listen(port, () =>
