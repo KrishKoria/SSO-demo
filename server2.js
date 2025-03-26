@@ -9,6 +9,7 @@ const port = 3002;
 const pageName = "Page 2";
 const secret = fs.readFileSync("secret.key", "utf8");
 const tokensFile = "tokens.json";
+const otherPort = 3001;
 
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -27,93 +28,93 @@ function writeTokens(tokens) {
 
 app.get("/", (req, res) => {
   const token = req.cookies.token;
-  if (token) {
-    try {
-      jwt.verify(token, secret);
-      if (readTokens().includes(token)) {
-        return res.send(`Welcome to ${pageName}! <a href="/logout">Logout</a>`);
-      }
-    } catch (err) {}
+  let authContent;
+
+  try {
+    if (token && jwt.verify(token, secret) && readTokens().includes(token)) {
+      authContent = `Welcome to ${pageName}! <a href="/logout">Logout</a>`;
+    }
+  } catch (e) {}
+
+  res.send(`
+    ${
+      authContent || `<a href="/login">Login</a> | <a href="/signup">Signup</a>`
+    }
+    <script>
+      let lastAuth = ${!!token};
+      setInterval(() => fetch('/check-auth')
+        .then(r => r.json())
+        .then(({ authenticated }) => {
+          if (authenticated !== lastAuth) {
+            lastAuth = authenticated;
+            location.reload();
+          }
+        }), 2000);
+    </script>
+  `);
+});
+
+app.get("/login", (req, res) =>
+  res.send(`
+  <form action="/login" method="post">
+    <input name="username" placeholder="Username" required>
+    <input type="password" name="password" placeholder="Password" required>
+    <button>Login</button>
+  </form><a href="/signup">Signup</a>
+`)
+);
+
+app.get("/signup", (req, res) =>
+  res.send(`
+  <form action="/signup" method="post">
+    <input name="username" placeholder="Username" required>
+    <input type="password" name="password" placeholder="Password" required>
+    <button>Signup</button>
+  </form><a href="/login">Login</a>
+`)
+);
+
+app.post("/login", (req, res) => handleAuth(req, res, "login"));
+app.post("/signup", (req, res) => handleAuth(req, res, "signup"));
+
+function handleAuth(req, res, action) {
+  const { username, password } = req.body;
+  const token = jwt.sign({ username }, secret, { expiresIn: "1h" });
+  const tokens = readTokens();
+
+  tokens.push(token);
+  writeTokens(tokens);
+
+  res.cookie("token", token, { httpOnly: true }).send(`
+    <script>
+      fetch('http://localhost:${otherPort}/sso-login?token=${token}', {
+        credentials: 'include'
+      }).then(() => location.href = '/');
+    </script>
+  `);
+}
+
+app.get("/check-auth", (req, res) => {
+  try {
+    const token = req.cookies.token;
+    const valid =
+      token && readTokens().includes(token) && jwt.verify(token, secret);
+    return res.json({ authenticated: !!valid });
+  } catch (e) {
+    res.json({ authenticated: false });
   }
-  res.send(`<a href="/login">Login</a> | <a href="/signup">Signup</a>`);
-});
-
-app.get("/login", (req, res) => {
-  res.send(`
-    <form action="/login" method="post">
-      <input type="text" name="username" placeholder="Username" required>
-      <input type="password" name="password" placeholder="Password" required>
-      <button type="submit">Login</button>
-    </form>
-    <a href="/signup">Signup</a>
-  `);
-});
-
-app.get("/signup", (req, res) => {
-  res.send(`
-    <form action="/signup" method="post">
-      <input type="text" name="username" placeholder="Username" required>
-      <input type="password" name="password" placeholder="Password" required>
-      <button type="submit">Signup</button>
-    </form>
-    <a href="/login">Login</a>
-  `);
-});
-
-app.post("/login", (req, res) => {
-  const { username, password } = req.body;
-  const token = jwt.sign({ username }, secret, { expiresIn: "1h" });
-  const tokens = readTokens();
-  tokens.push(token);
-  writeTokens(tokens);
-  res.cookie("token", token, { httpOnly: true });
-  res.send(`
-    <html>
-      <body>
-        <p>Login successful! Redirecting...</p>
-        <iframe src="http://localhost:3001/sso-login?token=${token}" style="display:none;"></iframe>
-        <script>
-          setTimeout(() => window.location.href = "/", 1000);
-        </script>
-      </body>
-    </html>
-  `);
-});
-
-app.post("/signup", (req, res) => {
-  const { username, password } = req.body;
-  const token = jwt.sign({ username }, secret, { expiresIn: "1h" });
-  const tokens = readTokens();
-  tokens.push(token);
-  writeTokens(tokens);
-  res.cookie("token", token, { httpOnly: true });
-  res.send(`
-    <html>
-      <body>
-        <p>Signup successful! Redirecting...</p>
-        <iframe src="http://localhost:3001/sso-login?token=${token}" style="display:none;"></iframe>
-        <script>
-          setTimeout(() => window.location.href = "/", 1000);
-        </script>
-      </body>
-    </html>
-  `);
 });
 
 app.get("/sso-login", (req, res) => {
   const token = req.query.token;
-  if (token) {
-    try {
-      jwt.verify(token, secret);
-      const tokens = readTokens();
-      if (tokens.includes(token)) {
-        res.cookie("token", token, { httpOnly: true });
-        return res.send("OK");
-      }
-    } catch (err) {}
+  if (token && readTokens().includes(token)) {
+    res.cookie("token", token, { httpOnly: true }).send("OK");
+  } else {
+    res.status(401).send("Invalid token");
   }
-  res.status(401).send("Invalid token");
 });
+
+app.get("/sso-logout", (req, res) => res.clearCookie("token").send("OK"));
 
 app.get("/logout", (req, res) => {
   const token = req.cookies.token;
@@ -122,35 +123,16 @@ app.get("/logout", (req, res) => {
     tokens = tokens.filter((t) => t !== token);
     writeTokens(tokens);
     res.clearCookie("token");
-    res.send(`
-      <html>
-        <body>
-          <p>Logout successful! Redirecting...</p>
-          <iframe src="http://localhost:3001/sso-logout?token=${token}" style="display:none;"></iframe>
-          <script>
-            setTimeout(() => window.location.href = "/", 1000);
-          </script>
-        </body>
-      </html>
-    `);
-  } else {
-    res.redirect("/");
   }
+  res.send(`
+    <script>
+      fetch('http://localhost:${otherPort}/sso-logout', {
+        credentials: 'include'
+      }).then(() => location.href = '/');
+    </script>
+  `);
 });
 
-app.get("/sso-logout", (req, res) => {
-  const token = req.query.token;
-  if (token) {
-    let tokens = readTokens();
-    tokens = tokens.filter((t) => t !== token);
-    writeTokens(tokens);
-    res.clearCookie("token");
-    res.send("OK");
-  } else {
-    res.status(400).send("Token required");
-  }
-});
-
-app.listen(port, () => {
-  console.log(`${pageName} running on http://localhost:${port}`);
-});
+app.listen(port, () =>
+  console.log(`${pageName} running on http://localhost:${port}`)
+);
