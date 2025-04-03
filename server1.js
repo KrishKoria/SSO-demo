@@ -3,27 +3,38 @@ const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const bodyParser = require("body-parser");
-
+const path = require("path");
 const app = express();
 const port = 3001;
 const pageName = "Page 1";
-const secret = fs.readFileSync("secret.key", "utf8");
-const tokensFile = "tokens.json";
-const otherPort = 3002;
+const secretPath = path.join(
+  __dirname,
+  process.env.NODE_ENV === "production" ? "shared/secret.key" : "secret.key"
+);
+const secret = fs.readFileSync(secretPath, "utf8");
+const tokensPath = path.join(
+  __dirname,
+  process.env.NODE_ENV === "production" ? "shared/tokens.json" : "tokens.json"
+);
+
+const otherServerUrl =
+  process.env.NODE_ENV === "production"
+    ? "http://server2:3002"
+    : "http://localhost:3002";
 
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 function readTokens() {
   try {
-    return JSON.parse(fs.readFileSync(tokensFile, "utf8"));
+    return JSON.parse(fs.readFileSync(tokensPath, "utf8"));
   } catch (err) {
     return [];
   }
 }
 
 function writeTokens(tokens) {
-  fs.writeFileSync(tokensFile, JSON.stringify(tokens), "utf8");
+  fs.writeFileSync(tokensPath, JSON.stringify(tokens), "utf8");
 }
 
 app.get("/", (req, res) => {
@@ -87,7 +98,7 @@ function handleAuth(req, res, action) {
 
   res.cookie("token", token, { httpOnly: true }).send(`
       <script>
-        fetch('http://localhost:${otherPort}/sso-login?token=${token}', {
+        fetch('${otherServerUrl}/sso-login?token=${token}', {
           credentials: 'include'
         })
         .then(() => {
@@ -135,7 +146,7 @@ app.get("/logout", (req, res) => {
   }
   res.send(`
       <script>
-        fetch('http://localhost:${otherPort}/sso-logout', {
+        fetch('${otherServerUrl}/sso-logout', {
           credentials: 'include'
         })
         .then(() => {

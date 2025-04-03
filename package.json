@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "web1": "nodemon server1.js",
-    "web2": "nodemon server2.js"
+    "web2": "nodemon server2.js",
+    "start:web1": "node server1.js",
+    "start:web2": "node server2.js"
   },
   "keywords": [],
   "author": "",

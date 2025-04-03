@@ -1,0 +1,41 @@
+services:
+  server1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - SERVER_TYPE=web1
+      # If using Solution 2:
+      # - SERVER_TYPE=web1
+      - NODE_ENV=production
+    volumes:
+      - shared-data:/app/shared
+    networks:
+      - sso-network
+    restart: always
+
+  server2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - SERVER_TYPE=web2
+      # If using Solution 2:
+      # - SERVER_TYPE=web2
+      - NODE_ENV=production
+    volumes:
+      - shared-data:/app/shared
+    networks:
+      - sso-network
+    restart: always
+
+networks:
+  sso-network:
+    driver: bridge
+
+volumes:
+  shared-data:
