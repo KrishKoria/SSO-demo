@@ -25,4 +25,4 @@ RUN echo "[]" > /app/shared/tokens.json
 EXPOSE 3001 3002
 
 # Use environment variable to determine which server to start
-CMD ["sh", "-c", "npm run start:$SERVER_TYPE"]
+CMD ["./start-servers.sh"]
